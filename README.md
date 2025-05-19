@@ -2,7 +2,9 @@
 
 An interactive web-based tool for managing and visualizing Reltio platform permissions. This application allows you to create, edit, and visualize complex permission structures for resources and roles, with support for attribute filters.
 
-![Reltio Permissions Editor Screenshot](screenshot.png)
+![Reltio Permissions Editor Screenshot]
+![image](https://github.com/user-attachments/assets/84d15a23-3a4a-443b-8489-4c43097e50a2)
+
 
 ## Features
 
