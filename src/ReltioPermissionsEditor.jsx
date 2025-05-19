@@ -58,7 +58,10 @@ const ReltioPermissionsEditor = () => {
   const [jsonError, setJsonError] = useState('');
   const [resourceFilter, setResourceFilter] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
-  const [darkMode, setDarkMode] = useState(false);
+  const [darkMode, setDarkMode] = useState(() => {
+    // Get theme preference from localStorage, default to false (light theme)
+    return localStorage.getItem('darkMode') === 'true';
+  });
 
   // Extract all unique roles on data change
   useEffect(() => {
@@ -73,21 +76,24 @@ const ReltioPermissionsEditor = () => {
 
   // Toggle dark mode
   const toggleDarkMode = () => {
-    setDarkMode(!darkMode);
+    const newDarkMode = !darkMode;
+    setDarkMode(newDarkMode);
+    // Save theme preference to localStorage
+    localStorage.setItem('darkMode', newDarkMode.toString());
     // Add/remove dark-mode class from body
-    if (!darkMode) {
+    if (newDarkMode) {
       document.body.classList.add('dark-mode');
     } else {
       document.body.classList.remove('dark-mode');
     }
   };
 
-  // Apply dark mode class on initial load if system prefers dark mode
+  // Apply dark mode class on initial load
   useEffect(() => {
-    const prefersDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    if (prefersDarkMode) {
-      setDarkMode(true);
+    if (darkMode) {
       document.body.classList.add('dark-mode');
+    } else {
+      document.body.classList.remove('dark-mode');
     }
     
     // Add dark mode CSS to document
@@ -146,7 +152,7 @@ const ReltioPermissionsEditor = () => {
       }
     `;
     document.head.appendChild(style);
-  }, []);
+  }, [darkMode]);
 
   // Handle copying JSON to clipboard
   const copyJsonToClipboard = () => {
