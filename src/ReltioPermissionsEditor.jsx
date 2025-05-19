@@ -377,6 +377,171 @@ const ReltioPermissionsEditor = () => {
     );
   };
 
+  // Export permission matrix to CSV
+  const exportToCSV = () => {
+    // Create header row with resource URIs
+    const headers = ['Role', ...permissionsData.map(resource => resource.uri)];
+    
+    // Create data rows for each role
+    const rows = allRoles.map(role => {
+      const roleData = [role];
+      permissionsData.forEach(resource => {
+        const permissions = resource.permissions.find(p => p.role === role)?.access || [];
+        const filter = resource.permissions.find(p => p.role === role)?.filter;
+        const cellData = permissions.map(p => accessTypes[p]?.label || p).join('|');
+        roleData.push(filter ? `${cellData} [Filtered: "${filter.replace(/"/g, '""')}"]` : cellData);
+      });
+      return roleData;
+    });
+    
+    // Combine headers and rows
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.join(','))
+    ].join('\n');
+    
+    // Create and trigger download
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'permission_matrix.csv');
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Import permission matrix from CSV
+  const importFromCSV = (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const csvContent = e.target.result;
+        
+        // Split the content into lines and remove empty lines
+        const lines = csvContent.split('\n').filter(line => line.trim());
+        
+        // Parse the header row
+        const headers = lines[0].split(',').map(header => header.trim());
+        if (headers[0] !== 'Role') throw new Error('First column must be "Role"');
+        
+        // Create new permissions data
+        const newPermissionsData = [];
+        const newRoles = new Set();
+        
+        // Process each data row
+        for (let i = 1; i < lines.length; i++) {
+          const line = lines[i];
+          const cells = [];
+          let currentCell = '';
+          let inQuotes = false;
+          
+          // Parse the line character by character to handle quoted values
+          for (let j = 0; j < line.length; j++) {
+            const char = line[j];
+            if (char === '"') {
+              inQuotes = !inQuotes;
+            } else if (char === ',' && !inQuotes) {
+              cells.push(currentCell.trim());
+              currentCell = '';
+            } else {
+              currentCell += char;
+            }
+          }
+          cells.push(currentCell.trim()); // Add the last cell
+          
+          const role = cells[0];
+          if (!role) continue; // Skip empty rows
+          newRoles.add(role);
+          
+          // Process each resource column
+          for (let j = 1; j < headers.length; j++) {
+            const resourceUri = headers[j];
+            if (!resourceUri) continue; // Skip empty resource columns
+            
+            const cellData = cells[j];
+            if (!cellData) continue; // Skip empty cells
+            
+            // Parse permissions and filter
+            let permissions = [];
+            let filter = null;
+            
+            if (cellData.includes('[Filtered:')) {
+              const [perms, filterPart] = cellData.split('[Filtered:');
+              permissions = perms.split('|').map(p => p.trim());
+              // Extract filter and clean up quotes
+              filter = filterPart
+                .replace(']', '')
+                .trim()
+                .replace(/^"/, '')
+                .replace(/"$/, '')
+                .replace(/""/g, '"');
+            } else {
+              permissions = cellData.split('|').map(p => p.trim());
+            }
+            
+            // Convert permission labels to access types
+            const accessTypesMap = permissions.map(label => {
+              // First try to find an exact match
+              const entry = Object.entries(accessTypes).find(([_, data]) => data.label === label);
+              if (entry) return entry[0];
+              
+              // If no exact match, try to find a case-insensitive match
+              const caseInsensitiveEntry = Object.entries(accessTypes).find(
+                ([_, data]) => data.label.toLowerCase() === label.toLowerCase()
+              );
+              if (caseInsensitiveEntry) return caseInsensitiveEntry[0];
+              
+              // If still no match, return the original label
+              return label;
+            });
+            
+            // Find or create resource entry
+            let resourceEntry = newPermissionsData.find(r => r.uri === resourceUri);
+            if (!resourceEntry) {
+              resourceEntry = { uri: resourceUri, permissions: [] };
+              newPermissionsData.push(resourceEntry);
+            }
+            
+            // Check if role already exists for this resource
+            const existingPermissionIndex = resourceEntry.permissions.findIndex(p => p.role === role);
+            if (existingPermissionIndex !== -1) {
+              // Update existing permission
+              resourceEntry.permissions[existingPermissionIndex] = {
+                role,
+                access: accessTypesMap,
+                ...(filter && { filter })
+              };
+            } else {
+              // Add new permission
+              resourceEntry.permissions.push({
+                role,
+                access: accessTypesMap,
+                ...(filter && { filter })
+              });
+            }
+          }
+        }
+        
+        // Update state
+        setPermissionsData(newPermissionsData);
+        setAllRoles(Array.from(newRoles).sort());
+        
+        // Show success message
+        alert('CSV import completed successfully!');
+        
+      } catch (error) {
+        alert(`Error importing CSV: ${error.message}`);
+      }
+    };
+    
+    reader.readAsText(file);
+  };
+
   // Main render
   return (
     <div className={`container mx-auto p-4 ${darkMode ? 'dark-mode' : ''}`}>
@@ -705,7 +870,26 @@ const ReltioPermissionsEditor = () => {
       
       {/* Permission Matrix */}
       <div className="mt-6 p-4 bg-white rounded-lg shadow">
-        <h3 className="font-bold mb-4">Permission Matrix</h3>
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="font-bold">Permission Matrix</h3>
+          <div className="flex gap-2">
+            <button
+              className="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700 text-sm"
+              onClick={exportToCSV}
+            >
+              Export CSV
+            </button>
+            <label className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 text-sm cursor-pointer">
+              Import CSV
+              <input
+                type="file"
+                accept=".csv"
+                className="hidden"
+                onChange={importFromCSV}
+              />
+            </label>
+          </div>
+        </div>
         <div className="overflow-x-auto">
           <table className="min-w-full border-collapse">
             <thead>
