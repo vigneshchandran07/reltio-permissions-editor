@@ -383,8 +383,8 @@ const ReltioPermissionsEditor = () => {
     );
   };
 
-  // Export permission matrix to CSV
-  const exportToCSV = () => {
+  // Export permission matrix to TSV
+  const exportToTSV = () => {
     // Create header row with resource URIs
     const headers = ['Role', ...permissionsData.map(resource => resource.uri)];
     
@@ -395,44 +395,54 @@ const ReltioPermissionsEditor = () => {
         const permissions = resource.permissions.find(p => p.role === role)?.access || [];
         const filter = resource.permissions.find(p => p.role === role)?.filter;
         const cellData = permissions.map(p => accessTypes[p]?.label || p).join('|');
-        roleData.push(filter ? `${cellData} [Filtered: "${filter.replace(/"/g, '""')}"]` : cellData);
+        
+        // Handle filter if present
+        if (filter) {
+          // Escape double quotes with backslashes in the filter
+          const escapedFilter = filter.replace(/"/g, '\\"');
+          // No need to wrap in quotes since we're using TSV
+          roleData.push(`${cellData} [Filtered: ${escapedFilter}]`);
+        } else {
+          roleData.push(cellData);
+        }
       });
-      return roleData;
+      // Join with tabs
+      return roleData.join('\t');
     });
     
     // Combine headers and rows
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(row => row.join(','))
+    const tsvContent = [
+      headers.join('\t'),
+      ...rows
     ].join('\n');
     
     // Create and trigger download
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob([tsvContent], { type: 'text/tab-separated-values;charset=utf-8;' });
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
-    link.setAttribute('download', 'permission_matrix.csv');
+    link.setAttribute('download', 'permission_matrix.tsv');
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
-  // Import permission matrix from CSV
-  const importFromCSV = (event) => {
+  // Import permission matrix from TSV
+  const importFromTSV = (event) => {
     const file = event.target.files[0];
     if (!file) return;
 
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
-        const csvContent = e.target.result;
+        const tsvContent = e.target.result;
         
         // Split the content into lines and remove empty lines
-        const lines = csvContent.split('\n').filter(line => line.trim());
+        const lines = tsvContent.split('\n').filter(line => line.trim());
         
         // Parse the header row
-        const headers = lines[0].split(',').map(header => header.trim());
+        const headers = lines[0].split('\t').map(header => header.trim());
         if (headers[0] !== 'Role') throw new Error('First column must be "Role"');
         
         // Create new permissions data
@@ -442,23 +452,7 @@ const ReltioPermissionsEditor = () => {
         // Process each data row
         for (let i = 1; i < lines.length; i++) {
           const line = lines[i];
-          const cells = [];
-          let currentCell = '';
-          let inQuotes = false;
-          
-          // Parse the line character by character to handle quoted values
-          for (let j = 0; j < line.length; j++) {
-            const char = line[j];
-            if (char === '"') {
-              inQuotes = !inQuotes;
-            } else if (char === ',' && !inQuotes) {
-              cells.push(currentCell.trim());
-              currentCell = '';
-            } else {
-              currentCell += char;
-            }
-          }
-          cells.push(currentCell.trim()); // Add the last cell
+          const cells = line.split('\t');
           
           const role = cells[0];
           if (!role) continue; // Skip empty rows
@@ -479,13 +473,11 @@ const ReltioPermissionsEditor = () => {
             if (cellData.includes('[Filtered:')) {
               const [perms, filterPart] = cellData.split('[Filtered:');
               permissions = perms.split('|').map(p => p.trim());
-              // Extract filter and clean up quotes
+              // Extract filter and unescape backslashed quotes
               filter = filterPart
                 .replace(']', '')
                 .trim()
-                .replace(/^"/, '')
-                .replace(/"$/, '')
-                .replace(/""/g, '"');
+                .replace(/\\"/g, '"'); // Unescape backslashed quotes
             } else {
               permissions = cellData.split('|').map(p => p.trim());
             }
@@ -538,10 +530,10 @@ const ReltioPermissionsEditor = () => {
         setAllRoles(Array.from(newRoles).sort());
         
         // Show success message
-        alert('CSV import completed successfully!');
+        alert('TSV import completed successfully!');
         
       } catch (error) {
-        alert(`Error importing CSV: ${error.message}`);
+        alert(`Error importing TSV: ${error.message}`);
       }
     };
     
@@ -881,17 +873,17 @@ const ReltioPermissionsEditor = () => {
           <div className="flex gap-2">
             <button
               className="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700 text-sm"
-              onClick={exportToCSV}
+              onClick={exportToTSV}
             >
-              Export CSV
+              Export TSV
             </button>
             <label className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 text-sm cursor-pointer">
-              Import CSV
+              Import TSV
               <input
                 type="file"
-                accept=".csv"
+                accept=".tsv,.txt"
                 className="hidden"
-                onChange={importFromCSV}
+                onChange={importFromTSV}
               />
             </label>
           </div>
