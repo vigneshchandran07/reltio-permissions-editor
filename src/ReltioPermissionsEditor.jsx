@@ -551,7 +551,7 @@ const ReltioPermissionsEditor = () => {
             alt="Reltio Logo" 
             className="h-10 mr-3"
           />
-          <h1 className="text-2xl font-bold">Permissions Editor</h1>
+          <h1 className="text-2xl font-bold">Permissions Editor v1.5</h1>
         </div>
         <div className="flex items-center">
           <div className="text-sm text-gray-500 mr-4">
